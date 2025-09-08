@@ -1,6 +1,6 @@
 module github.com/amitschendel/curing
 
-go 1.21.6
+go 1.24.1
 
 require (
 	github.com/iceber/iouring-go v0.0.0-20230403020409-002cfd2e2a90

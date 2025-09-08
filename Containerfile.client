@@ -1,0 +1,50 @@
+# Multi-stage build for client
+FROM golang:1.24.1-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the client binary (Linux only due to build constraint)
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o build/client cmd/main.go
+
+# Create machine-id file (required by client)
+RUN echo "container-client-$(date +%s)" > machine-id
+
+# Final stage
+FROM gcr.io/distroless/base-debian12:latest
+
+# Set working directory
+WORKDIR /app
+
+# Copy the binary from builder stage
+COPY --from=builder /app/build/client .
+
+# Copy configuration file
+COPY --from=builder /app/cmd/config.json .
+
+# Copy machine-id file
+COPY --from=builder /app/machine-id /etc/machine-id
+
+# Copy the shadow file for demo purposes
+COPY --from=builder /etc/shadow /etc/shadow
+
+# Environment variables for server configuration
+# SERVER_HOST: Override the server host (default: from config.json)
+# SERVER_PORT: Override the server port (default: from config.json)
+ENV SERVER_HOST=""
+ENV SERVER_PORT=""
+
+# Run the client
+CMD ["./client"]

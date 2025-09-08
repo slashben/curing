@@ -1,0 +1,38 @@
+# Multi-stage build for server
+FROM golang:1.24.1-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the server binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o build/server server/main.go
+
+# Final stage
+FROM gcr.io/distroless/base-debian12:latest
+
+# Set working directory
+WORKDIR /app
+
+# Copy the binary from builder stage
+COPY --from=builder /app/build/server .
+
+# Copy configuration file
+COPY --from=builder /app/cmd/config.json .
+
+# Expose the server port
+EXPOSE 8888
+
+# Run the server
+CMD ["./server"]
