@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: client
-        image: quay.io/benarmosec/curing:1.0-client
+        image: ghcr.io/entlein/curiousclient:latest
         imagePullPolicy: Always
         env:
         - name: SERVER_HOST
