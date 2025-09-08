@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: server
-        image: ghcr.io/entlein/curiousserver:latest
+        image: ghcr.io/entlein/curiourserver:latest
         ports:
         - containerPort: 8888
           name: tcp
