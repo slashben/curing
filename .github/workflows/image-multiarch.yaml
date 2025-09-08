@@ -58,7 +58,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_C }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_S }}:latest
 
       - name: Build and push 2
         uses: docker/build-push-action@v6
