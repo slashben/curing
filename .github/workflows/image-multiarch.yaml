@@ -10,7 +10,7 @@ on:
 env:
   REGISTRY: ghcr.io/entlein
   IMAGE_NAME_C: curiousclient
-  IMAGE_NAME_S: curiourserver
+  IMAGE_NAME_S: curiousserver
 
 
 jobs:
