@@ -1,4 +1,4 @@
-name: Build and push the bobctl
+name: Build and push the curious images
 on:
   push:
     branches:
