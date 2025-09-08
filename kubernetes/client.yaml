@@ -5,7 +5,7 @@ metadata:
   labels:
     app: curing-client
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: curing-client
@@ -17,11 +17,10 @@ spec:
       containers:
       - name: client
         image: quay.io/benarmosec/curing:1.0-client
+        imagePullPolicy: Always
         env:
         - name: SERVER_HOST
           value: "curing-server-service"  # Points to the server service
-        - name: SERVER_PORT
-          value: "8888"
         resources:
           requests:
             memory: "64Mi"
