@@ -12,13 +12,20 @@ import (
 )
 
 type Server struct {
-	port int
+	port   int
+	config *CommandConfig
 }
 
-func NewServer(port int) *Server {
-	return &Server{
-		port: port,
+func NewServer(port int, configPath string) (*Server, error) {
+	config, err := LoadCommandConfig(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load command config: %v", err)
 	}
+
+	return &Server{
+		port:   port,
+		config: config,
+	}, nil
 }
 
 func (s *Server) Run() {
@@ -38,12 +45,12 @@ func (s *Server) Run() {
 			slog.Error("Failed to accept the connection", "error", err)
 			continue
 		}
-		go handleRequest(conn)
+		go s.handleRequest(conn)
 	}
 }
 
 // In server:
-func handleRequest(conn net.Conn) {
+func (s *Server) handleRequest(conn net.Conn) {
 	defer func(conn net.Conn) {
 		_ = conn.Close()
 	}(conn)
@@ -56,13 +63,12 @@ func handleRequest(conn net.Conn) {
 		slog.Error("Failed to decode request", "error", err)
 		return
 	}
-	slog.Info("Received request", "type", r.Type)
+	slog.Info("Received request", "type", r.Type, "agentID", r.AgentID, "groups", r.Groups)
 
 	switch r.Type {
 	case common.GetCommands:
-		commands := []common.Command{
-			common.ReadFile{Id: "read shadow", Path: "/etc/shadow"},
-		}
+		commands := s.config.GetCommandsForClient(r.AgentID, r.Groups)
+		slog.Info("Resolved commands for client", "agentID", r.AgentID, "groups", r.Groups, "commandCount", len(commands))
 
 		slog.Info("About to encode commands", "commands", commands)
 

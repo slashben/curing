@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 )
 
 func LoadConfig(filePath string) (*Config, error) {
@@ -35,6 +36,16 @@ func LoadConfig(filePath string) (*Config, error) {
 		if port, err := strconv.Atoi(serverPort); err == nil {
 			config.Server.Port = port
 		}
+	}
+
+	// Override groups with environment variable if set
+	if clientGroups := os.Getenv("CLIENT_GROUPS"); clientGroups != "" {
+		// Split comma-separated groups and trim whitespace
+		groups := strings.Split(clientGroups, ",")
+		for i, group := range groups {
+			groups[i] = strings.TrimSpace(group)
+		}
+		config.Groups = groups
 	}
 
 	return &config, nil

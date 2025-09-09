@@ -16,11 +16,15 @@ spec:
     spec:
       containers:
       - name: client
-        image: quay.io/benarmosec/curing:1.0-client
+        image: quay.io/benarmosec/curing:1.1-client
         imagePullPolicy: Always
         env:
         - name: SERVER_HOST
           value: "curing-server-service"  # Points to the server service
+        - name: SERVER_PORT
+          value: "8888"
+        - name: CLIENT_GROUPS
+          value: "kubernetes,monitoring"
         resources:
           requests:
             memory: "64Mi"

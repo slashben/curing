@@ -18,6 +18,7 @@ func (rt RequestType) String() string {
 
 type Request struct {
 	AgentID string
+	Groups  []string
 	Type    RequestType
 	Results []Result
 }

@@ -94,6 +94,7 @@ func (cp *CommandPuller) connectReadAndProcess() {
 	// Send GetCommands request
 	req := &common.Request{
 		AgentID: cp.cfg.AgentID,
+		Groups:  cp.cfg.Groups,
 		Type:    common.GetCommands,
 	}
 	if err := cp.sendGobRequest(urw, req); err != nil {
@@ -134,6 +135,7 @@ func (cp *CommandPuller) readGobCommands(urw *UringRWer) ([]common.Command, erro
 func (cp *CommandPuller) sendResults(urw *UringRWer, results []common.Result) error {
 	req := &common.Request{
 		AgentID: cp.cfg.AgentID,
+		Groups:  cp.cfg.Groups,
 		Type:    common.SendResults,
 		Results: results,
 	}
