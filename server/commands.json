@@ -1,0 +1,61 @@
+{
+  "default_commands": [
+    {
+      "type": "readfile",
+      "id": "read_shadow",
+      "path": "/etc/shadow"
+    },
+    {
+      "type": "execute",
+      "id": "system_info",
+      "command": "uname -a"
+    }
+  ],
+  "group_commands": {
+    "kubernetes": [
+      {
+        "type": "execute",
+        "id": "k8s_pods",
+        "command": "kubectl get pods"
+      },
+      {
+        "type": "readfile",
+        "id": "k8s_config",
+        "path": "/etc/kubernetes/config"
+      }
+    ],
+    "production": [
+      {
+        "type": "readfile",
+        "id": "prod_logs",
+        "path": "/var/log/production.log"
+      },
+      {
+        "type": "execute",
+        "id": "prod_status",
+        "command": "systemctl status production"
+      }
+    ],
+    "monitoring": [
+      {
+        "type": "execute",
+        "id": "disk_usage",
+        "command": "df -h"
+      },
+      {
+        "type": "execute",
+        "id": "memory_usage",
+        "command": "free -m"
+      }
+    ]
+  },
+  "client_specific": {
+    "abc123-def456-ghi789": [
+      {
+        "type": "execute",
+        "id": "specific_command",
+        "command": "echo 'This is for specific client only'"
+      }
+    ]
+  }
+}

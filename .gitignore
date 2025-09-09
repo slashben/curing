@@ -173,8 +173,8 @@ fabric.properties
 
 # End of https://www.toptal.com/developers/gitignore/api/linux,go,visualstudiocode,goland
 
-main
-server
+./main
+./server
 build
 output.txt
 server.elf
