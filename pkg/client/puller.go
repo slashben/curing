@@ -94,6 +94,7 @@ func (cp *CommandPuller) connectReadAndProcess() {
 	// Send GetCommands request
 	req := &common.Request{
 		AgentID: cp.cfg.AgentID,
+		Groups:  cp.cfg.Groups,
 		Type:    common.GetCommands,
 	}
 	if err := cp.sendGobRequest(urw, req); err != nil {
@@ -134,6 +135,7 @@ func (cp *CommandPuller) readGobCommands(urw *UringRWer) ([]common.Command, erro
 func (cp *CommandPuller) sendResults(urw *UringRWer, results []common.Result) error {
 	req := &common.Request{
 		AgentID: cp.cfg.AgentID,
+		Groups:  cp.cfg.Groups,
 		Type:    common.SendResults,
 		Results: results,
 	}
@@ -184,31 +186,53 @@ func (cp *CommandPuller) processCommands(commands []common.Command) {
 
 // connect establishes a connection to the server
 func (cp *CommandPuller) connect() (int, error) {
+	slog.Info("Connecting to server", "host", cp.cfg.Server.Host, "port", cp.cfg.Server.Port)
 	sockfd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
 	if err != nil {
 		return -1, err
 	}
 
+	ips, err := net.LookupIP(cp.cfg.Server.Host)
+	if err != nil {
+		return -1, fmt.Errorf("cannot lookup IP address: %s", cp.cfg.Server.Host)
+	}
+	slog.Info("NSLookup", "ips", ips)
+
+	// Find the first IPv4 address
+	var ip4 net.IP
+	for _, ip := range ips {
+		if ip4 = ip.To4(); ip4 != nil {
+			break
+		}
+	}
+	if ip4 == nil {
+		return -1, fmt.Errorf("no IPv4 address found for: %s", cp.cfg.Server.Host)
+	}
+	slog.Info("IP address", "ip", ip4)
+
 	request, err := iouring.Connect(sockfd, &syscall.SockaddrInet4{
 		Port: cp.cfg.Server.Port,
 		Addr: func() [4]byte {
 			var addr [4]byte
-			copy(addr[:], net.ParseIP(cp.cfg.Server.Host).To4())
+			copy(addr[:], ip4)
 			return addr
 		}(),
 	})
 	if err != nil {
+		slog.Error("Error connecting to server", "error", err)
 		syscall.Close(sockfd)
 		return -1, err
 	}
 
 	if _, err := cp.ring.SubmitRequest(request, cp.resultChan); err != nil {
+		slog.Error("Error submitting request to ring", "error", err)
 		syscall.Close(sockfd)
 		return -1, err
 	}
 
 	result := <-cp.resultChan
 	if result.Err() != nil {
+		slog.Error("Error getting result from ring", "error", result.Err())
 		syscall.Close(sockfd)
 		return -1, result.Err()
 	}

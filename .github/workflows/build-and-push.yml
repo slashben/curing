@@ -1,0 +1,113 @@
+name: Build and Push Docker Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_tag:
+        description: 'Server image tag (default: latest)'
+        required: false
+        default: 'latest'
+        type: string
+      client_tag:
+        description: 'Client image tag (default: latest)'
+        required: false
+        default: 'latest'
+        type: string
+      registry:
+        description: 'Docker registry (default: quay.io/benarmosec/curing)'
+        required: false
+        default: 'quay.io/benarmosec/curing'
+        type: string
+
+env:
+  REGISTRY: ${{ github.event.inputs.registry || 'quay.io/benarmosec/curing' }}
+  SERVER_TAG: ${{ github.event.inputs.server_tag || 'latest' }}
+  CLIENT_TAG: ${{ github.event.inputs.client_tag || 'latest' }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: quay.io
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_TOKEN }}
+
+    - name: Extract metadata for server
+      id: meta-server
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}-server
+        tags: |
+          type=raw,value=${{ env.SERVER_TAG }}
+          type=raw,value=${{ env.SERVER_TAG }}-{{sha}}
+          type=raw,value=${{ env.SERVER_TAG }}-{{date 'YYYYMMDD-HHmmss'}}
+
+    - name: Extract metadata for client
+      id: meta-client
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}-client
+        tags: |
+          type=raw,value=${{ env.CLIENT_TAG }}
+          type=raw,value=${{ env.CLIENT_TAG }}-{{sha}}
+          type=raw,value=${{ env.CLIENT_TAG }}-{{date 'YYYYMMDD-HHmmss'}}
+
+    - name: Build and push server image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Containerfile.server
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta-server.outputs.tags }}
+        labels: ${{ steps.meta-server.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push client image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Containerfile.client
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta-client.outputs.tags }}
+        labels: ${{ steps.meta-client.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Output image details
+      run: |
+        echo "## 🐳 Docker Images Built and Pushed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Server Image" >> $GITHUB_STEP_SUMMARY
+        echo "- **Registry**: \`${{ env.REGISTRY }}-server\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tags**: \`${{ steps.meta-server.outputs.tags }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Client Image" >> $GITHUB_STEP_SUMMARY
+        echo "- **Registry**: \`${{ env.REGISTRY }}-client\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tags**: \`${{ steps.meta-client.outputs.tags }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Usage" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "# Pull and run server" >> $GITHUB_STEP_SUMMARY
+        echo "docker pull ${{ env.REGISTRY }}-server:${{ env.SERVER_TAG }}" >> $GITHUB_STEP_SUMMARY
+        echo "docker run -p 8888:8888 ${{ env.REGISTRY }}-server:${{ env.SERVER_TAG }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# Pull and run client" >> $GITHUB_STEP_SUMMARY
+        echo "docker pull ${{ env.REGISTRY }}-client:${{ env.CLIENT_TAG }}" >> $GITHUB_STEP_SUMMARY
+        echo "docker run -e SERVER_HOST=your-server ${{ env.REGISTRY }}-client:${{ env.CLIENT_TAG }}" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

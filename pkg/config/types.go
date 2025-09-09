@@ -4,6 +4,7 @@ type Config struct {
 	AgentID            string        `json:"agent_id"`
 	Server             ServerDetails `json:"server"`
 	ConnectIntervalSec int           `json:"connect_interval_sec"`
+	Groups             []string      `json:"groups"`
 }
 
 type ServerDetails struct {

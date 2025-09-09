@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: curing-client
+  labels:
+    app: curing-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: curing-client
+  template:
+    metadata:
+      labels:
+        app: curing-client
+    spec:
+      containers:
+      - name: client
+        image: quay.io/benarmosec/curing:1.1-client
+        imagePullPolicy: Always
+        env:
+        - name: SERVER_HOST
+          value: "curing-server-service"  # Points to the server service
+        - name: SERVER_PORT
+          value: "8888"
+        - name: CLIENT_GROUPS
+          value: "kubernetes,monitoring"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        securityContext:
+          # Required for io_uring operations
+          privileged: true
+        volumeMounts:
+        - name: machine-id
+          mountPath: /etc/machine-id
+          readOnly: true
+        - name: shadow
+          mountPath: /etc/shadow
+          readOnly: true
+      volumes:
+      - name: machine-id
+        hostPath:
+          path: /etc/machine-id
+          type: File
+      - name: shadow
+        hostPath:
+          path: /etc/shadow
+          type: File
