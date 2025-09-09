@@ -49,7 +49,7 @@ jobs:
       id: meta-server
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}-server
+        images: ${{ env.REGISTRY }}
         tags: |
           type=raw,value=${{ env.SERVER_TAG }}
           type=raw,value=${{ env.SERVER_TAG }}-{{sha}}
@@ -59,7 +59,7 @@ jobs:
       id: meta-client
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}-client
+        images: ${{ env.REGISTRY }}
         tags: |
           type=raw,value=${{ env.CLIENT_TAG }}
           type=raw,value=${{ env.CLIENT_TAG }}-{{sha}}
@@ -94,20 +94,20 @@ jobs:
         echo "## 🐳 Docker Images Built and Pushed" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Server Image" >> $GITHUB_STEP_SUMMARY
-        echo "- **Registry**: \`${{ env.REGISTRY }}-server\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Registry**: \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Tags**: \`${{ steps.meta-server.outputs.tags }}\`" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Client Image" >> $GITHUB_STEP_SUMMARY
-        echo "- **Registry**: \`${{ env.REGISTRY }}-client\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Registry**: \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Tags**: \`${{ steps.meta-client.outputs.tags }}\`" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Usage" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
         echo "# Pull and run server" >> $GITHUB_STEP_SUMMARY
-        echo "docker pull ${{ env.REGISTRY }}-server:${{ env.SERVER_TAG }}" >> $GITHUB_STEP_SUMMARY
-        echo "docker run -p 8888:8888 ${{ env.REGISTRY }}-server:${{ env.SERVER_TAG }}" >> $GITHUB_STEP_SUMMARY
+        echo "docker pull ${{ env.REGISTRY }}:${{ env.SERVER_TAG }}" >> $GITHUB_STEP_SUMMARY
+        echo "docker run -p 8888:8888 ${{ env.REGISTRY }}:${{ env.SERVER_TAG }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "# Pull and run client" >> $GITHUB_STEP_SUMMARY
-        echo "docker pull ${{ env.REGISTRY }}-client:${{ env.CLIENT_TAG }}" >> $GITHUB_STEP_SUMMARY
-        echo "docker run -e SERVER_HOST=your-server ${{ env.REGISTRY }}-client:${{ env.CLIENT_TAG }}" >> $GITHUB_STEP_SUMMARY
+        echo "docker pull ${{ env.REGISTRY }}:${{ env.CLIENT_TAG }}" >> $GITHUB_STEP_SUMMARY
+        echo "docker run -e SERVER_HOST=your-server ${{ env.REGISTRY }}:${{ env.CLIENT_TAG }}" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
