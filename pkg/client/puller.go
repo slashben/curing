@@ -72,23 +72,24 @@ func (cp *CommandPuller) Run() {
 
 func (cp *CommandPuller) connectReadAndProcess() {
 	// Connect
-	fd, err := cp.connect()
+	conn, err := cp.connect()
 	if err != nil {
 		slog.Error("Error connecting to server", "error", err)
 		return
 	}
 
 	defer func() {
-		if err := cp.close(fd); err != nil {
+		if err := cp.close(conn); err != nil {
 			slog.Error("Error closing connection", "error", err)
 		}
 	}()
 
-	// Create UringRWer
-	urw := &UringRWer{
-		fd:         fd,
+	// Create NetworkRWer
+	urw := &NetworkRWer{
+		conn:       conn,
 		resultChan: cp.resultChan,
 		ring:       cp.ring,
+		useTCP:     cp.cfg.UseTCPNetwork,
 	}
 
 	// Send GetCommands request
@@ -114,7 +115,7 @@ func (cp *CommandPuller) connectReadAndProcess() {
 	}
 }
 
-func (cp *CommandPuller) sendGobRequest(urw *UringRWer, req *common.Request) error {
+func (cp *CommandPuller) sendGobRequest(urw *NetworkRWer, req *common.Request) error {
 	encoder := gob.NewEncoder(urw)
 	if err := encoder.Encode(req); err != nil {
 		return fmt.Errorf("failed to encode request: %w", err)
@@ -122,7 +123,7 @@ func (cp *CommandPuller) sendGobRequest(urw *UringRWer, req *common.Request) err
 	return nil
 }
 
-func (cp *CommandPuller) readGobCommands(urw *UringRWer) ([]common.Command, error) {
+func (cp *CommandPuller) readGobCommands(urw *NetworkRWer) ([]common.Command, error) {
 	// Try decoding immediately first
 	decoder := gob.NewDecoder(urw)
 	var commands []common.Command
@@ -132,7 +133,7 @@ func (cp *CommandPuller) readGobCommands(urw *UringRWer) ([]common.Command, erro
 	return commands, nil
 }
 
-func (cp *CommandPuller) sendResults(urw *UringRWer, results []common.Result) error {
+func (cp *CommandPuller) sendResults(urw *NetworkRWer, results []common.Result) error {
 	req := &common.Request{
 		AgentID: cp.cfg.AgentID,
 		Groups:  cp.cfg.Groups,
@@ -158,24 +159,25 @@ func (cp *CommandPuller) processCommands(commands []common.Command) {
 		// Wait for result with timeout
 		select {
 		case result := <-outputChan:
-			fd, err := cp.connect()
+			conn, err := cp.connect()
 			if err != nil {
 				slog.Error("Error connecting to send results", "error", err)
 				continue
 			}
 
-			// Create UringRWer
-			urw := &UringRWer{
-				fd:         fd,
+			// Create NetworkRWer
+			urw := &NetworkRWer{
+				conn:       conn,
 				resultChan: cp.resultChan,
 				ring:       cp.ring,
+				useTCP:     cp.cfg.UseTCPNetwork,
 			}
 
 			if err := cp.sendResults(urw, []common.Result{result}); err != nil {
 				slog.Error("Error sending results", "error", err)
 			}
 
-			cp.close(fd)
+			cp.close(conn)
 		case <-time.After(time.Second):
 			slog.Info("No immediate result for command", "command", cmd)
 		case <-cp.ctx.Done():
@@ -185,120 +187,164 @@ func (cp *CommandPuller) processCommands(commands []common.Command) {
 }
 
 // connect establishes a connection to the server
-func (cp *CommandPuller) connect() (int, error) {
+func (cp *CommandPuller) connect() (interface{}, error) {
 	slog.Info("Connecting to server", "host", cp.cfg.Server.Host, "port", cp.cfg.Server.Port)
-	sockfd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
-	if err != nil {
-		return -1, err
-	}
 
-	ips, err := net.LookupIP(cp.cfg.Server.Host)
-	if err != nil {
-		return -1, fmt.Errorf("cannot lookup IP address: %s", cp.cfg.Server.Host)
-	}
-	slog.Info("NSLookup", "ips", ips)
-
-	// Find the first IPv4 address
-	var ip4 net.IP
-	for _, ip := range ips {
-		if ip4 = ip.To4(); ip4 != nil {
-			break
+	if cp.cfg.UseTCPNetwork {
+		// Use standard TCP connection
+		address := fmt.Sprintf("%s:%d", cp.cfg.Server.Host, cp.cfg.Server.Port)
+		conn, err := net.DialTimeout("tcp", address, 10*time.Second)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to server %s: %w", address, err)
 		}
-	}
-	if ip4 == nil {
-		return -1, fmt.Errorf("no IPv4 address found for: %s", cp.cfg.Server.Host)
-	}
-	slog.Info("IP address", "ip", ip4)
+		slog.Info("Connected to server via TCP", "address", address)
+		return conn, nil
+	} else {
+		// Use io_uring connection (original behavior)
+		sockfd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+		if err != nil {
+			return -1, err
+		}
 
-	request, err := iouring.Connect(sockfd, &syscall.SockaddrInet4{
-		Port: cp.cfg.Server.Port,
-		Addr: func() [4]byte {
-			var addr [4]byte
-			copy(addr[:], ip4)
-			return addr
-		}(),
-	})
-	if err != nil {
-		slog.Error("Error connecting to server", "error", err)
-		syscall.Close(sockfd)
-		return -1, err
-	}
+		ips, err := net.LookupIP(cp.cfg.Server.Host)
+		if err != nil {
+			return -1, fmt.Errorf("cannot lookup IP address: %s", cp.cfg.Server.Host)
+		}
+		slog.Info("NSLookup", "ips", ips)
 
-	if _, err := cp.ring.SubmitRequest(request, cp.resultChan); err != nil {
-		slog.Error("Error submitting request to ring", "error", err)
-		syscall.Close(sockfd)
-		return -1, err
-	}
+		// Find the first IPv4 address
+		var ip4 net.IP
+		for _, ip := range ips {
+			if ip4 = ip.To4(); ip4 != nil {
+				break
+			}
+		}
+		if ip4 == nil {
+			return -1, fmt.Errorf("no IPv4 address found for: %s", cp.cfg.Server.Host)
+		}
+		slog.Info("IP address", "ip", ip4)
 
-	result := <-cp.resultChan
-	if result.Err() != nil {
-		slog.Error("Error getting result from ring", "error", result.Err())
-		syscall.Close(sockfd)
-		return -1, result.Err()
-	}
+		request, err := iouring.Connect(sockfd, &syscall.SockaddrInet4{
+			Port: cp.cfg.Server.Port,
+			Addr: func() [4]byte {
+				var addr [4]byte
+				copy(addr[:], ip4)
+				return addr
+			}(),
+		})
+		if err != nil {
+			slog.Error("Error connecting to server", "error", err)
+			syscall.Close(sockfd)
+			return -1, err
+		}
 
-	slog.Info("Connected to server", "sockfd", sockfd)
-	return sockfd, nil
+		if _, err := cp.ring.SubmitRequest(request, cp.resultChan); err != nil {
+			slog.Error("Error submitting request to ring", "error", err)
+			syscall.Close(sockfd)
+			return -1, err
+		}
+
+		result := <-cp.resultChan
+		if result.Err() != nil {
+			slog.Error("Error getting result from ring", "error", result.Err())
+			syscall.Close(sockfd)
+			return -1, result.Err()
+		}
+
+		slog.Info("Connected to server via io_uring", "sockfd", sockfd)
+		return sockfd, nil
+	}
 }
 
-type UringRWer struct {
-	fd         int
+type NetworkRWer struct {
+	conn       interface{} // Can be net.Conn or int (file descriptor)
 	resultChan chan iouring.Result
 	ring       *iouring.IOURing
+	useTCP     bool
 }
 
-var _ io.Reader = (*UringRWer)(nil)
-var _ io.Writer = (*UringRWer)(nil)
+var _ io.Reader = (*NetworkRWer)(nil)
+var _ io.Writer = (*NetworkRWer)(nil)
 
-func (cp *UringRWer) Read(buf []byte) (int, error) {
-	request := iouring.Read(cp.fd, buf)
-	if _, err := cp.ring.SubmitRequest(request, cp.resultChan); err != nil {
-		return -1, err
+func (nr *NetworkRWer) Read(buf []byte) (int, error) {
+	if nr.useTCP {
+		// Use standard TCP Read
+		conn := nr.conn.(net.Conn)
+		return conn.Read(buf)
+	} else {
+		// Use io_uring Read (original behavior)
+		fd := nr.conn.(int)
+		request := iouring.Read(fd, buf)
+		if _, err := nr.ring.SubmitRequest(request, nr.resultChan); err != nil {
+			return -1, err
+		}
+
+		result := <-nr.resultChan
+		if result.Err() != nil {
+			return -1, result.Err()
+		}
+
+		n := result.ReturnValue0().(int)
+		readBuf, _ := result.GetRequestBuffer()
+		// Copy the data into the provided buffer
+		copy(buf[:n], readBuf[:n])
+
+		return n, nil
 	}
-
-	result := <-cp.resultChan
-	if result.Err() != nil {
-		return -1, result.Err()
-	}
-
-	n := result.ReturnValue0().(int)
-	readBuf, _ := result.GetRequestBuffer()
-	// Copy the data into the provided buffer
-	copy(buf[:n], readBuf[:n])
-
-	return n, nil
 }
 
-func (cp *UringRWer) Write(buf []byte) (int, error) {
-	request := iouring.Write(cp.fd, buf)
-	if _, err := cp.ring.SubmitRequest(request, cp.resultChan); err != nil {
-		return -1, err
+func (nr *NetworkRWer) Write(buf []byte) (int, error) {
+	if nr.useTCP {
+		// Use standard TCP Write
+		conn := nr.conn.(net.Conn)
+		n, err := conn.Write(buf)
+		slog.Info("Wrote to TCP connection", "n", n)
+		return n, err
+	} else {
+		// Use io_uring Write (original behavior)
+		fd := nr.conn.(int)
+		request := iouring.Write(fd, buf)
+		if _, err := nr.ring.SubmitRequest(request, nr.resultChan); err != nil {
+			return -1, err
+		}
+
+		result := <-nr.resultChan
+		if result.Err() != nil {
+			return -1, result.Err()
+		}
+
+		n := result.ReturnValue0().(int)
+		slog.Info("Wrote to file descriptor", "fd", fd, "n", n)
+
+		return n, nil
 	}
-
-	result := <-cp.resultChan
-	if result.Err() != nil {
-		return -1, result.Err()
-	}
-
-	n := result.ReturnValue0().(int)
-	slog.Info("Wrote to file descriptor", "fd", cp.fd, "n", n)
-
-	return n, nil
 }
 
-func (cp *CommandPuller) close(fd int) error {
-	request := iouring.Close(fd)
-	if _, err := cp.ring.SubmitRequest(request, cp.resultChan); err != nil {
+func (cp *CommandPuller) close(conn interface{}) error {
+	if cp.cfg.UseTCPNetwork {
+		// Use standard TCP Close
+		tcpConn := conn.(net.Conn)
+		err := tcpConn.Close()
+		if err == nil {
+			slog.Info("Closed TCP connection")
+		}
 		return err
-	}
+	} else {
+		// Use io_uring Close (original behavior)
+		fd := conn.(int)
+		request := iouring.Close(fd)
+		if _, err := cp.ring.SubmitRequest(request, cp.resultChan); err != nil {
+			return err
+		}
 
-	result := <-cp.resultChan
-	if result.Err() != nil {
-		return result.Err()
-	}
+		result := <-cp.resultChan
+		if result.Err() != nil {
+			return result.Err()
+		}
 
-	slog.Info("Closed file descriptor", "fd", fd)
-	return nil
+		slog.Info("Closed file descriptor", "fd", fd)
+		return nil
+	}
 }
 
 func (cp *CommandPuller) Close() {
