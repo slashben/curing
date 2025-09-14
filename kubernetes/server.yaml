@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: server
-        image: quay.io/benarmosec/curing:1.1-server
+        image: quay.io/benarmosec/curing:1.3-server
         ports:
         - containerPort: 8888
           name: tcp
@@ -35,7 +35,7 @@ spec:
       - name: commands-config
         configMap:
           name: curing-server-commands
-        
+
 ---
 apiVersion: v1
 kind: Service
@@ -86,4 +86,4 @@ data:
       "client_specific": {}
     }
 
-      
+
